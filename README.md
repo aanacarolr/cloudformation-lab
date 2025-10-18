@@ -12,7 +12,7 @@ This project automates the deployment of a RESTful API using AWS Lambda and API 
    aws cloudformation describe-stacks --stack-name LambdaRestApiStack
 
 3. Test your endpoint using curl:
-   curl https://<api-id>.execute-api.<region>.amazonaws.com/prod/hello
+   curl https://y96aqwb2pk.execute-api.eu-west-1.amazonaws.com/dev/ip
 
 ## Project Structure
 - template.yaml → CloudFormation template defining all AWS resources.
