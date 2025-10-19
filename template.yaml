@@ -1,81 +1,117 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: CloudFormation Lab – Lambda REST API
+
+Description: REST API using AWS API Gateway with a Lambda Integration
 
 Resources:
-  LambdaExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: LambdaExecutionRoleCF
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
-  MyLambdaFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: MyApiHandler
-      Runtime: python3.9
-      Handler: index.lambda_handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Code:
-        S3Bucket: PLACEHOLDER_BUCKET
-        S3Key: lambda.zip
-      Timeout: 5
-
-  ApiGateway:
+  SimpleRestAPI:
     Type: AWS::ApiGateway::RestApi
     Properties:
-      Name: CloudFormationLabAPI
-      Policy:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal: "*"
-            Action: "execute-api:Invoke"
-            Resource: "execute-api:/*/*/*"
-            Condition:
-              IpAddress:
-                aws:SourceIp:
-                  - 185.44.0.0/16
-                  - 2.18.0.0/16
-                  - 5.44.0.0/14
-                  - 51.104.0.0/15
-                  
-  ApiResource:
+      Description: REST API that gets users IP
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Name: whats-my-ip-cf
+
+  ApiGatewayResource:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref ApiGateway
-      ParentId: !GetAtt ApiGateway.RootResourceId
-      PathPart: hello
+      ParentId: !GetAtt SimpleRestAPI.RootResourceId
+      PathPart: 'ip'
+      RestApiId: !Ref SimpleRestAPI
 
-  ApiMethod:
+  ApiGatewayMethod:
     Type: AWS::ApiGateway::Method
     Properties:
-      RestApiId: !Ref ApiGateway
-      ResourceId: !Ref ApiResource
       HttpMethod: GET
       AuthorizationType: NONE
       Integration:
-        Type: AWS_PROXY
+        Credentials: !GetAtt ApiGatewayIamRole.Arn
         IntegrationHttpMethod: POST
-        Uri: !Sub
-          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
-          - { LambdaArn: !GetAtt MyLambdaFunction.Arn }
+        Type: AWS_PROXY
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction.Arn}/invocations'
+      ResourceId: !Ref ApiGatewayResource
+      RestApiId: !Ref SimpleRestAPI
 
-  LambdaPermission:
-    Type: AWS::Lambda::Permission
+  ApiGatewayModel:
+    Type: AWS::ApiGateway::Model
     Properties:
-      FunctionName: !Ref MyLambdaFunction
-      Action: lambda:InvokeFunction
-      Principal: apigateway.amazonaws.com
+      ContentType: 'application/json'
+      RestApiId: !Ref SimpleRestAPI
+      Schema: {}
 
-Outputs:
-  ApiEndpoint:
-    Description: URL of REST API endpoint
-    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod/hello"
+  ApiGatewayStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      DeploymentId: !Ref ApiGatewayDeployment
+      Description: REST API dev stage
+      RestApiId: !Ref SimpleRestAPI
+      StageName: 'dev'
+
+  ApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: ApiGatewayMethod
+    Properties:
+      Description: Lambda API Deployment
+      RestApiId: !Ref SimpleRestAPI
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import json
+          def lambda_handler(event, context):
+              ip_address = event['requestContext']['identity']['sourceIp']
+              return {
+                  'body': json.dumps({"ip_address": ip_address}),
+                  'headers': {
+                      'Content-Type': 'application/json'
+                  },
+                  'statusCode': 200
+              }
+
+      Description: AWS Lambda function
+      FunctionName: 'get_ip'
+      Handler: index.lambda_handler
+      MemorySize: 256
+      Role: !GetAtt LambdaIamRole.Arn
+      Runtime: python3.9
+      Timeout: 60
+
+  ApiGatewayIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ''
+            Effect: 'Allow'
+            Principal:
+              Service:
+                - 'apigateway.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Path: '/'
+      Policies:
+        - PolicyName: LambdaAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action: 'lambda:*'
+                Resource: !GetAtt LambdaFunction.Arn
+
+  LambdaIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Path: '/'
