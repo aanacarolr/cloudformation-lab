@@ -12,7 +12,21 @@ Resources:
         Types:
           - REGIONAL
       Name: whats-my-ip-cf
-
+      Policy:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: "execute-api:Invoke"
+            Resource: "execute-api:/*/*/*"
+            Condition:
+              IpAddress:
+                aws:SourceIp:
+                  - 185.44.0.0/16
+                  - 2.18.0.0/16
+                  - 5.44.0.0/14
+                  - 51.104.0.0/15
+                  
   ApiGatewayResource:
     Type: AWS::ApiGateway::Resource
     Properties:
