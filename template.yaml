@@ -26,7 +26,8 @@ Resources:
                   - 2.18.0.0/16
                   - 5.44.0.0/14
                   - 51.104.0.0/15
-                  
+                  - 84.203.0.0/16
+
   ApiGatewayResource:
     Type: AWS::ApiGateway::Resource
     Properties:
